@@ -32,18 +32,24 @@ A compatible integration should:
 1. Serialize the complete retain request before attempting network delivery.
 2. Store it in a profile-scoped durable store before handing work to a worker.
 3. Claim rows atomically so concurrent workers cannot deliver the same row concurrently.
-4. Keep failed rows pending and retry with bounded backoff.
-5. Release stale claims and replay pending rows on client startup.
-6. Acknowledge/delete a row only after the retain request is accepted by Hindsight.
-7. Persist a stable operation identifier for asynchronous retains when the SDK/API
+4. Prevent a later row for the same document from being claimed while an earlier row
+   is pending or in flight.
+5. Keep failed rows pending and retry with bounded backoff.
+6. Release stale claims and replay pending rows on client startup.
+7. Fence acknowledgements and reschedules with a per-claim lease token so a stale
+   worker cannot mutate a row after another worker has reclaimed it.
+8. Acknowledge/delete a row only after the retain request is accepted by Hindsight.
+9. Persist a stable operation identifier for asynchronous retains when the SDK/API
    supports one, and pass that identifier on retries.
-8. Treat operation-status `404` as "no longer pending" only when the provider's
+10. Route fresh delivery and replay through one ordered writer/coordinator rather than
+    letting a replay loop dispatch concurrently with normal retains.
+11. Treat operation-status `404` as "no longer pending" only when the provider's
    documented operation lifecycle makes that interpretation safe.
 
 SQLite is one suitable client-side implementation. It should use parameterized SQL,
-WAL/busy-timeout settings, a unique local deduplication key, and restrictive file
-permissions where supported. The exact local schema is an implementation detail and
-must not be added to Hindsight's server database.
+WAL/busy-timeout settings, a unique local deduplication key, claim fencing, and
+restrictive file permissions where supported. The exact local schema is an
+implementation detail and must not be added to Hindsight's server database.
 
 ## Semantics and limits
 
